@@ -1,20 +1,28 @@
 import { StatusBar } from 'expo-status-bar';
 
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
 
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faArrowRight,faArrowLeft, faCalendarWeek } from '@fortawesome/free-solid-svg-icons';
-// import Icon from 'react-native-vector-icons/MaterialIcons'; // Or any icon library you prefer
-
-import { NavigationContainer,useNavigation } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
-import Workers from './Workers';
+import { useNavigation } from '@react-navigation/native';
+import { useDatabaseContext } from '../contexts/DatabaseContext';
+import LoadingScreen from './LoadingScreen';
 
 const AttendanceBoard = () => {
   const navigation = useNavigation();
+  const {
+    isInitialized,
+    isLoading,
+    error,
+    attendanceStats,
+    refreshAttendanceData
+  } = useDatabaseContext();
+
+  useEffect(() => {
+    if (isInitialized) {
+      refreshAttendanceData();
+    }
+  }, [isInitialized]);
 
   const handleWorkers = () => {
     navigation.navigate("Workers");
@@ -32,6 +40,32 @@ const AttendanceBoard = () => {
     navigation.navigate("WorkersList");
   };
 
+  const handleSettings = () => {
+    navigation.navigate("Settings");
+  };
+
+  // Show loading screen while database is initializing
+  if (isLoading || !isInitialized) {
+    return <LoadingScreen message="Initializing attendance system..." />;
+  }
+
+  // Show error if database failed to initialize
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons name="warning" size={48} color="#ff6b6b" />
+        <Text style={styles.errorText}>Database Error</Text>
+        <Text style={styles.errorMessage}>{error}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => refreshAttendanceData()}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
 
   return (
     <View style={styles.container}>
@@ -39,7 +73,9 @@ const AttendanceBoard = () => {
       <View style={styles.headerContainer}>
         <Ionicons name="menu" size={34} color="black" />
         <Text style={styles.headerText}>Attendance Board</Text>
-        <Ionicons name="settings" size={28} color="black" />
+        <TouchableOpacity onPress={handleSettings}>
+          <Ionicons name="settings" size={28} color="black" />
+        </TouchableOpacity>
       </View>
 
       {/* Cards */}
@@ -47,24 +83,38 @@ const AttendanceBoard = () => {
         <TouchableOpacity style={styles.card} onPress={handleWorkers}>
         <FontAwesome name="calendar-check-o" size={34} color="white" />
           <View>
-          <Text style={styles.cardNumber}>32</Text>
+          <Text style={styles.cardNumber}>{attendanceStats.presentToday}</Text>
           <Text style={styles.cardLabel}>Total workers present</Text>
           </View>
-          {/* Date of today */}
         </TouchableOpacity>
-        
+
       </View>
       <View style={styles.cardsContainer}>
-        
+
         <TouchableOpacity style={styles.card} onPress={hanWorkers}>
         <FontAwesome name="calendar-times-o" size={34} color="white" />
           <View>
-          <Text style={styles.cardNumber}>5</Text>
+          <Text style={styles.cardNumber}>{attendanceStats.absentToday}</Text>
           <Text style={styles.cardLabel}>Total workers absent</Text>
           </View>
-          {/* Date of today */}
         </TouchableOpacity>
-        
+
+      </View>
+
+      {/* Additional Stats Card */}
+      <View style={styles.cardsContainer}>
+        <TouchableOpacity style={[styles.card, styles.statsCard]}>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{attendanceStats.totalWorkers}</Text>
+              <Text style={styles.statLabel}>Total Workers</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{attendanceStats.lateToday}</Text>
+              <Text style={styles.statLabel}>Late Today</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Placeholder for additional content */}
@@ -181,6 +231,58 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#fff',
     fontWeight: 'bold',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ff6b6b',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: '#028831',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  statsCard: {
+    backgroundColor: '#4a90e2',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: 'white',
+    marginTop: 4,
   },
 });
 

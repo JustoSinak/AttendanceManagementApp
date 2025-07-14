@@ -1,50 +1,138 @@
-import React from 'react';
-import {View,Text,StyleSheet,TextInput,TouchableOpacity,FlatList,Image,} from 'react-native';
-// import Icon from 'react-native-vector-icons/MaterialIcons';
-
-// import { FontAwesome } from '@expo/vector-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faArrowRight,faArrowLeft } from '@fortawesome/free-solid-svg-icons';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import React, { useState, useEffect } from 'react';
+import {View,Text,StyleSheet,TextInput,TouchableOpacity,FlatList,Image, Alert} from 'react-native';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import AttendanceBoard from './AttendanceBoard';
+import { useDatabaseContext } from '../contexts/DatabaseContext';
+import { Worker } from '../services/database';
+import LoadingScreen from './LoadingScreen';
 
 
-const WorkerCard = ({ name, role, arrTime,hoursWorked, deduction }) => {
+interface WorkerCardProps {
+  worker: Worker;
+  attendanceInfo?: {
+    checkInTime?: string;
+    hoursWorked?: number;
+    status: string;
+  };
+  onEdit: (worker: Worker) => void;
+  onDelete: (worker: Worker) => void;
+}
+
+const WorkerCard: React.FC<WorkerCardProps> = ({ worker, attendanceInfo, onEdit, onDelete }) => {
+  const handleEdit = () => onEdit(worker);
+  const handleDelete = () => onDelete(worker);
+
   return (
     <View style={styles.workerCard}>
       <Image
         style={styles.workerImage}
-        source={{ uri: 'https://via.placeholder.com/50' }} // Placeholder image
+        source={{ uri: 'https://via.placeholder.com/50' }}
       />
       <View style={styles.workerInfo}>
-        <Text style={styles.workerName}>{name}</Text>
-        <Text style={styles.workerRole}>{role}</Text>
-        <Text style={styles.workerDetails}>Arrived Time: {arrTime}</Text>
-        <Text style={styles.workerDetails}>Hours worked: {hoursWorked}</Text>
-        <Text style={styles.workerDetails}>Deduction: {deduction}</Text>
+        <Text style={styles.workerName}>{worker.name}</Text>
+        <Text style={styles.workerRole}>{worker.role}</Text>
+        {attendanceInfo && (
+          <>
+            <Text style={styles.workerDetails}>
+              Status: {attendanceInfo.status}
+            </Text>
+            {attendanceInfo.checkInTime && (
+              <Text style={styles.workerDetails}>
+                Check-in: {attendanceInfo.checkInTime}
+              </Text>
+            )}
+            {attendanceInfo.hoursWorked && (
+              <Text style={styles.workerDetails}>
+                Hours: {attendanceInfo.hoursWorked.toFixed(1)}h
+              </Text>
+            )}
+          </>
+        )}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity style={styles.editButton} onPress={handleEdit}>
+            <Ionicons name="pencil" size={16} color="white" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+            <Ionicons name="trash" size={16} color="white" />
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
 };
 
 const Workers = () => {
-
-  
-  
-  const workers = [
-    { id: '1', name: 'John Doe', role: 'Chef-chanter',arrTime:'8:00', hoursWorked: '8hrs', deduction: '0FCFA' },
-    { id: '2', name: 'John Doe', role: 'Chef-chanter',arrTime:'8:00', hoursWorked: '8hrs', deduction: '0FCFA' },
-    { id: '3', name: 'John Doe', role: 'Chef-chanter',arrTime:'8:00', hoursWorked: '8hrs', deduction: '0FCFA' },
-    { id: '4', name: 'John Doe', role: 'Chef-chanter',arrTime:'8:00', hoursWorked: '8hrs', deduction: '0FCFA' },
-    { id: '5', name: 'John Doe', role: 'Chef-chanter',arrTime:'8:00', hoursWorked: '8hrs', deduction: '0FCFA' },
-  ];
-
   const navigation = useNavigation();
-    
+  const {
+    workers,
+    todayAttendance,
+    deleteWorker,
+    isLoading,
+    refreshWorkers,
+    refreshAttendanceData
+  } = useDatabaseContext();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredWorkers, setFilteredWorkers] = useState<Worker[]>([]);
+
+  useEffect(() => {
+    refreshWorkers();
+    refreshAttendanceData();
+  }, []);
+
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredWorkers(workers);
+    } else {
+      const filtered = workers.filter(worker =>
+        worker.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        worker.role.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredWorkers(filtered);
+    }
+  }, [workers, searchQuery]);
+
   const handleHome = () => {
     navigation.navigate("AttendanceBoard");
   };
+
+  const handleAddWorker = () => {
+    navigation.navigate("AddWorkerForm");
+  };
+
+  const handleEditWorker = (worker: Worker) => {
+    navigation.navigate("AddWorkerForm", { worker, isEditing: true });
+  };
+
+  const handleDeleteWorker = (worker: Worker) => {
+    Alert.alert(
+      'Delete Worker',
+      `Are you sure you want to delete ${worker.name}? This will also delete all their attendance records.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteWorker(worker.id!);
+              Alert.alert('Success', 'Worker deleted successfully');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete worker');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const getWorkerAttendanceInfo = (workerId: number) => {
+    return todayAttendance.find(attendance => attendance.workerId === workerId);
+  };
+
+  if (isLoading) {
+    return <LoadingScreen message="Loading workers..." />;
+  }
 
 
   return (
@@ -60,33 +148,47 @@ const Workers = () => {
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <TextInput
-          placeholder="Search..."
+          placeholder="Search workers..."
           style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
         />
         <Ionicons name="search" size={24} color="gray" style={styles.searchIcon} />
       </View>
 
       {/* Worker List */}
-      <FlatList
-        data={workers}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <WorkerCard
-            name={item.name}
-            role={item.role}
-            arrTime={item.arrTime}
-            hoursWorked={item.hoursWorked}
-            deduction={item.deduction}
-            
-          />
-        )}
-        contentContainerStyle={styles.workerList}
-        numColumns={2}
-      />
+      {filteredWorkers.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="people-outline" size={64} color="#ccc" />
+          <Text style={styles.emptyText}>
+            {searchQuery ? 'No workers found' : 'No workers added yet'}
+          </Text>
+          <Text style={styles.emptySubtext}>
+            {searchQuery ? 'Try a different search term' : 'Add your first worker to get started'}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredWorkers}
+          keyExtractor={(item) => item.id!.toString()}
+          renderItem={({ item }) => (
+            <WorkerCard
+              worker={item}
+              attendanceInfo={getWorkerAttendanceInfo(item.id!)}
+              onEdit={handleEditWorker}
+              onDelete={handleDeleteWorker}
+            />
+          )}
+          contentContainerStyle={styles.workerList}
+          numColumns={2}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       {/* Add Worker Button */}
-      <TouchableOpacity style={styles.addButton}>
-        <Text style={styles.addButtonText}>Add a worker +</Text>
+      <TouchableOpacity style={styles.addButton} onPress={handleAddWorker}>
+        <Ionicons name="add" size={24} color="white" />
+        <Text style={styles.addButtonText}>Add Worker</Text>
       </TouchableOpacity>
     </View>
   );
@@ -170,11 +272,50 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   addButtonText: {
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 8,
+  },
+  editButton: {
+    backgroundColor: '#4a90e2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  deleteButton: {
+    backgroundColor: '#ff6b6b',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
 });
 
